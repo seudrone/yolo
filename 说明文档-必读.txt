@@ -1,0 +1,98 @@
+环境搭建：
+(1)ubuntu14.04 cuda6.5 opencv2.4.？
+sudo dpkg -i cuda-repo-l4t-r21.3-6-5-prod_6.5-42_armhf.deb 
+sudo apt-get update 
+sudo apt-get install cuda-toolkit-6-5
+
+http://blog.csdn.net/qq_27840681/article/details/70195911
+http://blog.csdn.net/qq_27840681/article/details/63682694
+https://pjreddie.com/darknet/yolo/
+http://blog.csdn.net/qq_27840681/article/details/65081871
+
+
+文件夹架构：
+darknet
+-》src//源文件
+-》backup//生成的模型weights
+-》data//.names文件
+-》cfg//配置文件
+-》obj//编译生成的.o
+-》scripts//脚本文件
+-》mytrain//关于自己数据集的文件
+----》Annotations//所有图片对应的xml
+----》ImageSets/Main//     train.txt   val.txt  指明哪些图片是训练集，哪些是验证集create_list.py生成
+----》JPEGImages//所有图片
+----》labels//每张图片生成的txt   voc_label.py  通过xml生成，其中包含class，x，y,width,height
+----》train.txt//指明哪些图片是训练集  voc_label.py  通过  ImageSets/Main/train.txt生成
+----》val.txt//指明哪些图片是验证集  voc_label.py  通过  ImageSets/Main/val.txt生成
+
+
+
+训练模型：
+（1）下载yolo源码，git clone https://github.com/pjreddie/darknet，会有一个darknet文件夹
+（2）下载预训练模型：curl -O https://pjreddie.com/media/files/darknet19_448.conv.23，预训练模型是在ImageNet上进行训练的，我们采取了效果最好的darknet 19 448*448
+（3）制作自己的数据集：
+  （3.1）训练的时候需要cfg/chariot.data   cfg/yolo-chariot.cfg(或tiny-yolo-chariot.cfg)  darknet19_448.conv.23    
+
+运行：./darknet detector train cfg/chariot.data cfg/yolo-chariot.cfg darknet19_448.conv.23
+  （3.2）新建cfg/chariot.data
+内容如下：
+classes= 6
+train  = /home/cdb/darknet/mytrain/train.txt
+valid  = /home/cdb/darknet/mytrain/val.txt
+names = data/chariot.names
+backup = /home/cdb/darknet/backup
+
+    （3.2.1）指明训练集（路径改为本机路径）
+    （3.2.2）指明验证集（路径改为本机路径）
+    （3.2.3）指明类型名
+内容如下：
+chariot
+bike
+box
+bag
+car
+person
+  （3.3）新建cfg/yolo-chariot.cfg：该文件是训练模型的配置文件
+    （3.3.1）复制yolo-voc.cfg
+    （3.3.2）更改【region】层  classes=6
+    （3.3.3）【region】层上一个【convolution】层中filters改为(classes+ coords+ 1)* (NUM)=（6+4+1）×5=55
+  （3.4)train.txt和val.txt的生成
+    （3.4.1）将所有图片放在JPEGImages目录下
+     (3.4.2）通过标定生成所有图片的xml（文件名一定要对应）放在Annotation下
+    （3.4.3）运行./voc_label.py  生成mytrain/train.txt   mytrain/val.txt
+  （3.5）src修改
+     （3.5.1）yolo.c
+              char *voc_names[] = {"chariot","car","bike","bag","box","person"};//分类的名称
+              draw_detections(im, l.side*l.side*l.n, thresh, boxes, probs, voc_names, alphabet, 6);//20改为6
+              else if(0==strcmp(argv[2], "demo")) demo(cfg, weights, thresh, cam_index, filename, voc_names, 6, frame_skip, prefix, .5);//20改为6
+              train_yolo()
+                 char *train_images = "/home/ndd/darknet/mytrain/train.txt";  
+                 char *backup_directory = "/home/ndd/darknet/backup/"; 
+              validate_yolo() 
+                 char *base = "/home/ndd/darknet/results/comp4_det_test_";  
+                 list *plist = get_paths("/home/ndd/darknet/mytrain/val.txt");  
+              validate_yolo_recall()
+                 char *base = "/home/ndd/darknet/results/comp4_det_test_";  
+                 list *plist = get_paths("/home/ndd/darknet/mytrain/val.txt");  
+      (3.5.2)detector.c
+              list *plist = get_paths("/home/ndd/darknet/mytrain/val.txt");  
+    (3.6)Makefile
+GPU=1
+CUDNN=1
+OPENCV=1
+DEBUG=0
+   （3.7）
+1.下载预训练模型darknet19_448.conv.23放在darknet目录下
+2.运行./darknet detector train cfg/voc.data cfg/yolo-voc.cfg darknet19_448.conv.23
+3.最大迭代次数在yolo-voc.cfg中max_matches修改
+
+
+
+
+测试:
+./darknet detector recall cfg/chariot.data cfg/yolo-chariot.cfg backup/yolo_voc_final.weights
+（.weights为自己训练好的weights）
+（可以更改thresh）
+（可以查看precision  IoU）
+（可以更改迭代次数）
